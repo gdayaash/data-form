@@ -5,7 +5,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // set current month as default
   const now = new Date();
-  const currentMonth = now.toISOString().slice(0, 7); // "YYYY-MM"
+  // "YYYY-MM"
+  const currentMonth = now.toISOString().slice(0, 7);
   console.log(currentMonth);
   startDate.value = currentMonth;
   endDate.value = currentMonth;

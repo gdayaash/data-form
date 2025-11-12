@@ -11,8 +11,10 @@ if (!defined('ABSPATH')) exit;
 //Including autoload
 require_once plugin_dir_path(__FILE__) . 'vendor/autoload.php';
 
+require_once plugin_dir_path(__FILE__) . 'includes/helpers.php';
+
 // Include admin logic
-require_once plugin_dir_path(__FILE__) . 'controllers/funcitons.php';
+require_once plugin_dir_path(__FILE__) . 'controllers/functions.php';
 
 function dp_render_admin_page() {
     include plugin_dir_path(__FILE__) . 'views/form.php';
