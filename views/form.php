@@ -1,7 +1,32 @@
 <?php
+
 global $wpdb;
 $table_name = $wpdb->prefix . 'clients';
 $clients = $wpdb->get_results("SELECT client_id, client_name FROM {$table_name} ORDER BY client_name ASC");
+
+// $query = "SELECT 
+//     client_contracts.*, 
+//     headcounts.*
+// FROM wp_clients_contracts AS client_contracts
+// LEFT JOIN wp_contract_headcounts AS headcounts
+//        ON headcounts.client_contract_id = client_contracts.client_contract_id
+//        AND headcounts.datetime <= '2025-10-31 00:00:00'
+// WHERE client_contracts.client_id = 47
+//   AND client_contracts.datetime <= '2025-10-31 00:00:00'
+// ORDER BY client_contracts.datetime DESC, headcounts.datetime DESC
+// LIMIT 1;";
+
+// $get_headcounts = $wpdb->get_results("$query", ARRAY_A);
+
+// print_r($get_headcounts);
+
+// echo "<br>";
+// echo "<br>";
+
+// echo "<br>";
+
+// echo $get_headcounts[0]['total_headcount'];
+
 ?>
 
 <section class="plugin-ui-area">
@@ -46,7 +71,7 @@ $clients = $wpdb->get_results("SELECT client_id, client_name FROM {$table_name} 
                                         <option value="">-- Select Client --</option>
                                         <?php if (!empty($clients)): ?>
                                             <?php foreach ($clients as $client): ?>
-                                                <option value="<?php echo esc_attr($client->client_name); ?>">
+                                                <option value="<?php echo esc_attr($client->client_id); ?>">
                                                     <?php echo esc_html($client->client_name); ?>
                                                 </option>
                                             <?php endforeach; ?>
