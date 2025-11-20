@@ -3,70 +3,64 @@ namespace DataForm\Sheets;
 
 if (!defined('ABSPATH')) exit;
 
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use DataForm\Includes as Helpers;
 
-function generateActiveUsersSheet(Spreadsheet $spreadsheet, array $months, array $allData) {
+class ActiveUsersSheetBuilder {
 
-    $sheet = $spreadsheet->getActiveSheet();
-    $sheet->setTitle('Active Users');
+    public function build(Spreadsheet $spreadsheet, array $months, array $data) {
 
-    $activeLabels = [
-        'Categories',
-        'Workforce count',
-        'Total registrations',
-        'Total usage',
-        'Unique users',
-        '',
-        'Quarterly average',
-        '',
-        'Six months average'
-    ];
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Active Users');
 
-    $categoryMap = [
-        'Workforce count'     => 'workforce_count',
-        'Total registrations' => 'total_registrations',
-        'Total usage'         => 'total_usage',
-        'Unique users'        => 'unique_users',
-        'Quarterly average'   => 'quarterly_average',
-        'Six months average'  => 'six_month_average',
-    ];
+        $labels = [
+            "Categories",
+            "Workforce count",
+            "Total registrations",
+            "Total usage",
+            "Unique users",
+            "",
+            "Quarterly average",
+            "",
+            "Six months average"
+        ];
 
-    Helpers\writeHeaders($sheet, 1, 2, $months);
-    Helpers\writeColumn($sheet, 'A', 1, $activeLabels);
+        $map = [
+            "Workforce count" => "workforce_count",
+            "Total registrations" => "total_registrations",
+            "Total usage" => "total_usage",
+            "Unique users" => "unique_users",
+            "Quarterly average" => "quarterly_average",
+            "Six months average" => "six_month_average",
+        ];
 
-    $rowIndex = 2;
+        Helpers\writeHeaders($sheet, 1, 2, $months);
+        Helpers\writeColumn($sheet, 'A', 1, $labels);
 
-    foreach ($activeLabels as $label) {
+        $row = 2;
 
-        if ($label === 'Categories') continue;
+        foreach ($labels as $label) {
+            if ($label === "Categories") continue;
+            if ($label === "") { $row++; continue; }
 
-        if ($label === '') {
-            $rowIndex++;
-            continue;
-        }
+            foreach ($months as $mIndex => $month) {
 
-        foreach ($months as $mIndex => $monthLabel) {
+                $col = Coordinate::stringFromColumnIndex(2 + $mIndex);
 
-            $col = Coordinate::stringFromColumnIndex(2 + $mIndex);
-            $value = "";
+                $key = $map[$label] ?? null;
+                $val = $key ? ($data[$month][$key] ?? 0) : "";
 
-            if (isset($categoryMap[$label])) {
-                $key = $categoryMap[$label];
-                $value = $allData[$monthLabel][$key] ?? '';
+                $sheet->setCellValue("{$col}{$row}", $val);
             }
 
-            $sheet->setCellValue("{$col}{$rowIndex}", $value);
+            $row++;
         }
 
-        $rowIndex++;
+        $lastCol = Coordinate::stringFromColumnIndex(1 + count($months));
+        Helpers\styleHeader($sheet, 'A1', "{$lastCol}1", 20, '0088CC');
+        Helpers\autoSizeColumns($sheet, 1 + count($months));
+
+        $sheet->freezePane("B2");
     }
-
-    $lastCol = Coordinate::stringFromColumnIndex(1 + count($months));
-
-    Helpers\styleHeader($sheet, 'A1', "{$lastCol}1", 20, '0088CC');
-    Helpers\autoSizeColumns($sheet, 1 + count($months));
-
-    $sheet->freezePane('B2');
 }

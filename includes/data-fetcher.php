@@ -1,141 +1,84 @@
 <?php
+namespace DataForm\Service;
 
 if (!defined('ABSPATH')) exit;
 
-// Table Names = wp_clients_contracts, wp_contract_headcounts;
+use DateTime;
 
-/**
- * Auto-detect table names safely
- */
-function df_resolve_table($primary, $fallbacks = []) {
-    global $wpdb;
+/*********************************
+ * SINGLE QUERY REPOSITORY
+ * (Replaces all 3 previous repos)
+ *********************************/
+class HeadcountRepository {
 
-    // Check primary name first
-    $table = $wpdb->prefix . $primary;
-    if ($wpdb->get_var("SHOW TABLES LIKE '{$table}'") === $table) {
-        return $table;
-    }
+    /**
+     * Fetch latest contract + latest headcount for the month
+     * using ONE optimized query.
+     */
+    public function getLatestHeadcountForMonth(int $clientId, DateTime $end): ?object {
+        global $wpdb;
 
-    // Check fallback table names
-    foreach ($fallbacks as $alt) {
-        $altTable = $wpdb->prefix . $alt;
-        if ($wpdb->get_var("SHOW TABLES LIKE '{$altTable}'") === $altTable) {
-            return $altTable;
-        }
-    }
+        $endStr = $end->format('Y-m-d H:i:s');
 
-    return null; // No table found
-}
+        $sql = "
+            SELECT client_contracts.*, headcounts.*
+            FROM {$wpdb->prefix}clients_contracts AS client_contracts
+            LEFT JOIN {$wpdb->prefix}contract_headcounts AS headcounts
+                ON headcounts.client_contract_id = client_contracts.client_contract_id
+                AND headcounts.datetime <= %s
+            WHERE client_contracts.client_id = %d
+              AND client_contracts.datetime <= %s
+            ORDER BY client_contracts.datetime DESC, headcounts.datetime DESC
+            LIMIT 1
+        ";
 
-/**
- * Fetches all monthly metrics for a client.
- * Safe, automatic, and accurate.
- */
-function df_get_monthly_data(int $client_id, DateTime $monthStart, DateTime $monthEnd) {
-    global $wpdb;
-
-    $startStr = $monthStart->format('Y-m-d 00:00:00');
-    $endStr   = $monthEnd->format('Y-m-d 23:59:59');
-
-    // ============================================================
-    // 1. Resolve Table Names
-    // ============================================================
-    $tbl_contracts = df_resolve_table(
-        'clients_contract',
-        ['clients_contracts', 'client_contracts']
-    );
-
-    $tbl_headcounts = df_resolve_table(
-        'contract_headcounts',
-        ['clients_contract_headcounts', 'wp_contract_headcounts']
-    );
-
-    if (!$tbl_contracts || !$tbl_headcounts) {
-        return [
-            'workforce_count'     => 0,
-            'total_registrations' => 0,
-            'total_usage'         => 0,
-            'unique_users'        => 0,
-            'quarterly_average'   => 0,
-            'six_month_average'   => 0,
-        ];
-    }
-
-    // ============================================================
-    // 2. Initialize Response Structure
-    // ============================================================
-    $results = [
-        'workforce_count'     => 0,
-        'total_registrations' => 0,
-        'total_usage'         => 0,
-        'unique_users'        => 0,
-        'quarterly_average'   => 0,
-        'six_month_average'   => 0,
-    ];
-
-    // ============================================================
-    // 3. Fetch Latest Contract for This Client (up to month end)
-    // ============================================================
-    $contract = $wpdb->get_row(
-        $wpdb->prepare(
-            "SELECT client_contract_id
-             FROM {$tbl_contracts}
-             WHERE client_id = %d
-               AND datetime <= %s
-             ORDER BY datetime DESC
-             LIMIT 1",
-            $client_id,
-            $endStr
-        )
-    );
-
-    if (!$contract) {
-        return $results;
-    }
-
-    $contract_id = intval($contract->client_contract_id);
-
-    // ============================================================
-    // 4. Fetch Headcount for this Month
-    // ============================================================
-    $headcount = $wpdb->get_row(
-        $wpdb->prepare(
-            "SELECT total_headcount
-             FROM {$tbl_headcounts}
-             WHERE client_contract_id = %d
-               AND datetime BETWEEN %s AND %s
-             ORDER BY datetime DESC
-             LIMIT 1",
-            $contract_id,
-            $startStr,
-            $endStr
-        )
-    );
-
-    // If no monthly record → fallback to latest before month end
-    if (!$headcount) {
-        $headcount = $wpdb->get_row(
-            $wpdb->prepare(
-                "SELECT total_headcount
-                 FROM {$tbl_headcounts}
-                 WHERE client_contract_id = %d
-                   AND datetime <= %s
-                 ORDER BY datetime DESC
-                 LIMIT 1",
-                $contract_id,
-                $endStr
-            )
+        return $wpdb->get_row(
+            $wpdb->prepare($sql, $endStr, $clientId, $endStr)
         );
     }
+}
 
-    $results['workforce_count'] = $headcount ? intval($headcount->total_headcount) : 0;
+/*********************************
+ * REPORT SERVICE USING ONE QUERY
+ *********************************/
+class ReportService {
 
-    // ============================================================
-    // 5. Placeholder Metrics (Add Your SQL Later)
-    // ============================================================
-    $results['total_registrations'] = 0;
-    $results['total_usage'] = 0;
-    $results['unique_users'] = 0;
+    public function buildMonthlyData(int $clientId, array $months): array {
 
-    return $results;
+        $repo = new HeadcountRepository();
+        $results = [];
+
+        foreach ($months as $label) {
+
+            // Convert month label to dates
+            $date = DateTime::createFromFormat("M'y", $label);
+
+            $start = (clone $date)->modify('first day of this month')->setTime(0, 0, 0);
+            $end   = (clone $date)->modify('last day of this month')->setTime(23, 59, 59);
+
+            // Defaults
+            $data = [
+                "workforce_count"     => 0,
+                "total_registrations" => 0,
+                "total_usage"         => 0,
+                "unique_users"        => 0,
+                "quarterly_average"   => 0,
+                "six_month_average"   => 0,
+            ];
+
+            // --------------------------------------------------------------------
+            // 🔥 ONE QUERY ONLY — returns contract + headcount together
+            // --------------------------------------------------------------------
+            $row = $repo->getLatestHeadcountForMonth($clientId, $end);
+            // If found, extract headcount
+            if ($row && isset($row->total_headcount)) {
+                $data["workforce_count"] = intval($row->total_headcount);
+            }
+
+            // Save
+            $results[$label] = $data;
+        }
+
+        return $results;
+    }
 }

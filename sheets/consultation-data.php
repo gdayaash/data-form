@@ -3,40 +3,44 @@ namespace DataForm\Sheets;
 
 if (!defined('ABSPATH')) exit;
 
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use DataForm\Includes as Helpers;
 
-function generateConsultationDataSheet(Spreadsheet $spreadsheet, array $months, array $allData) {
+class ConsultationDataSheetBuilder {
 
-    $sheet = new Worksheet($spreadsheet, 'Consultation Data');
-    $spreadsheet->addSheet($sheet);
+    public function build(Spreadsheet $spreadsheet, array $months, array $data) {
 
-    $consultations = ['Counsellor', 'Doctor', 'Dietitian', 'Financial'];
+        $sheet = new Worksheet($spreadsheet, "Consultation Data");
+        $spreadsheet->addSheet($sheet);
 
-    $headers = array_merge(['Sr No.', 'Consultation Taken'], $months, ['Total']);
-    Helpers\writeRow($sheet, 1, 1, $headers);
+        $consults = ["Counsellor", "Doctor", "Dietitian", "Financial"];
 
-    $startRow = 2;
+        $headers = array_merge(["Sr No.", "Consultation Taken"], $months, ["Total"]);
+        Helpers\writeRow($sheet, 1, 1, $headers);
 
-    foreach ($consultations as $i => $consultation) {
-        $row = $startRow + $i;
+        $rowStart = 2;
 
-        $sheet->setCellValue("A{$row}", $i + 1);
-        $sheet->setCellValue("B{$row}", $consultation);
+        foreach ($consults as $i => $label) {
 
-        foreach ($months as $m => $month) {
-            $col = Coordinate::stringFromColumnIndex(3 + $m);
-            $sheet->setCellValue("{$col}{$row}", rand(10, 100));
+            $r = $rowStart + $i;
+
+            $sheet->setCellValue("A{$r}", $i + 1);
+            $sheet->setCellValue("B{$r}", $label);
+
+            foreach ($months as $mIndex => $month) {
+                $col = Coordinate::stringFromColumnIndex(3 + $mIndex);
+                $sheet->setCellValue("{$col}{$r}", rand(10, 100)); // Placeholder
+            }
+
+            $firstCol = Coordinate::stringFromColumnIndex(3);
+            $lastCol  = Coordinate::stringFromColumnIndex(2 + count($months));
+            $totalCol = Coordinate::stringFromColumnIndex(3 + count($months));
+
+            $sheet->setCellValue("{$totalCol}{$r}", "=SUM({$firstCol}{$r}:{$lastCol}{$r})");
         }
 
-        $first = Coordinate::stringFromColumnIndex(3);
-        $last  = Coordinate::stringFromColumnIndex(2 + count($months));
-        $total = Coordinate::stringFromColumnIndex(3 + count($months));
-
-        $sheet->setCellValue("{$total}{$row}", "=SUM({$first}{$row}:{$last}{$row})");
+        $sheet->freezePane("C2");
     }
-
-    $sheet->freezePane('C2');
 }

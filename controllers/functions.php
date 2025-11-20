@@ -1,87 +1,64 @@
 <?php
-
 namespace DataForm\Controllers;
 
 if (!defined('ABSPATH')) exit;
 
-use DataForm\Sheets;
 use DateTime;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use DataForm\Service\ReportService;
+use DataForm\Sheets\ActiveUsersSheetBuilder;
+use DataForm\Sheets\ConsultationDataSheetBuilder;
 
-require_once plugin_dir_path(__FILE__) . '../sheets/active-users.php';
-require_once plugin_dir_path(__FILE__) . '../sheets/consultation-data.php';
+class AdminPageController {
 
-function dp_handle_form_submissions() {
-
-    if ($_SERVER["REQUEST_METHOD"] !== 'POST') return;
-
-
-    $client = intval($_POST['client'] ?? 0);
-    $startDateInput = sanitize_text_field($_POST['start_date'] ?? '');
-    $endDateInput   = sanitize_text_field($_POST['end_date'] ?? '');
-
-    if (!$client || !$startDateInput || !$endDateInput) {
-        wp_die("Invalid input.");
+    public static function renderAdminPage() {
+        include plugin_dir_path(__FILE__) . '/../views/form.php';
     }
 
-    $startDateObj = new DateTime($startDateInput . '-01');
-    $endDateObj   = new DateTime($endDateInput . '-01');
-    $endDateObj->modify('last day of this month');
+    public static function handlePost() {
 
-    // Build month labels
-    $months = [];
-    $temp = clone $startDateObj;
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') wp_die("Invalid Request");
 
-    while ($temp <= $endDateObj) {
-        $months[] = $temp->format("M'y");
-        $temp->modify('+1 month');
-    }
+        $client = intval($_POST['client']);
+        $start  = sanitize_text_field($_POST['start_date']);
+        $end    = sanitize_text_field($_POST['end_date']);
 
-    // Data storage
-    $allData = [];
+        if (!$client || !$start || !$end) wp_die("Invalid Input");
 
-    
-    // Fetch real DB data per month
-    foreach ($months as $monthLabel) {
-        
-        $dateObj = DateTime::createFromFormat("M'y", $monthLabel);
-        if (!$dateObj) {
-            $dateObj = DateTime::createFromFormat("M y", str_replace("'", " ", $monthLabel));
+        $startObj = new DateTime("$start-01");
+        $endObj   = new DateTime("$end-01");
+        $endObj->modify("last day of this month");
+
+        $months = [];
+        $temp = clone $startObj;
+
+        while ($temp <= $endObj) {
+            $months[] = $temp->format("M'y");
+            $temp->modify('+1 month');
         }
-        
-        $start = (clone $dateObj)->modify('first day of this month')->setTime(0,0,0);
-        $end   = (clone $dateObj)->modify('last day of this month')->setTime(23,59,59);
-        
-        $allData[$monthLabel] = df_get_monthly_data($client, $start, $end);
+
+        // Build all data
+        $service = new ReportService();
+        $allData = $service->buildMonthlyData($client, $months);
+
+        // Create spreadsheet
+        $spreadsheet = new Spreadsheet();
+
+        $active = new ActiveUsersSheetBuilder();
+        $active->build($spreadsheet, $months, $allData);
+
+        $consult = new ConsultationDataSheetBuilder();
+        $consult->build($spreadsheet, $months, $allData);
+
+        // Send file
+        while (ob_get_level()) ob_end_clean();
+
+        header("Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        header("Content-Disposition: attachment; filename=\"client-report-{$client}-" . date('Ymd-His') . ".xlsx\"");
+        header("Cache-Control: max-age=0");
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->save("php://output");
+        exit;
     }
-    
-    error_log("Data of All" . print_r($allData, true));
-    
-    $spreadsheet = new Spreadsheet();
-
-    // Generate sheets
-    Sheets\generateActiveUsersSheet($spreadsheet, $months, $allData);
-    Sheets\generateConsultationDataSheet($spreadsheet, $months, $allData);
-
-    // CLEAR ALL EXISTING OUTPUT BUFFERS
-    while (ob_get_level()) {
-        ob_end_clean();
-    }
-
-    // Download Excel
-    $filename = 'client-report-' . sanitize_title($client) . '-' . date('Ymd-His') . '.xlsx';
-
-    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    header("Content-Disposition: attachment; filename=\"{$filename}\"");
-    header('Cache-Control: max-age=0');
-
-
-    $writer = new Xlsx($spreadsheet);
-
-
-    $writer->save('php://output');
-    exit;
 }
-
-add_action('admin_post_dp_process_form', __NAMESPACE__ . '\\dp_handle_form_submissions');

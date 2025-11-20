@@ -9,21 +9,23 @@
 if (!defined('ABSPATH')) exit;
 
 require_once plugin_dir_path(__FILE__) . 'vendor/autoload.php';
+
+
+// Load dependencies
+require_once plugin_dir_path(__FILE__) . 'controllers/functions.php';
 require_once plugin_dir_path(__FILE__) . 'includes/helpers.php';
 require_once plugin_dir_path(__FILE__) . 'includes/data-fetcher.php';
-require_once plugin_dir_path(__FILE__) . 'controllers/functions.php';
+require_once plugin_dir_path(__FILE__) . 'sheets/active-users.php';
+require_once plugin_dir_path(__FILE__) . 'sheets/consultation-data.php';
 
-function dp_render_admin_page() {
-    include plugin_dir_path(__FILE__) . 'views/form.php';
-}
-
+// Menu UI
 add_action('admin_menu', function () {
     add_menu_page(
         'Client Report Filter',
         'Data Picker',
         'manage_options',
         'data-picker',
-        'dp_render_admin_page',
+        ['DataForm\Controllers\AdminPageController', 'renderAdminPage'],
         'dashicons-filter',
         26
     );
@@ -37,3 +39,6 @@ add_action('admin_enqueue_scripts', function($hook) {
     wp_enqueue_script('bootstrap-cdn', 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js');
     wp_enqueue_script('custom-js', plugin_dir_url(__FILE__) . 'assets/js/main.js');
 });
+
+// Handle form submit
+add_action('admin_post_dp_process_form', ['DataForm\Controllers\AdminPageController', 'handlePost']);
